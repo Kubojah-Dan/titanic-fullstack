@@ -1,0 +1,15 @@
+# Python-specific
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.env
+
+# Other common ignores
+.DS_Store
+*.log
+node_modules/
+dist/
