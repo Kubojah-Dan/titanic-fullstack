@@ -5,25 +5,19 @@ from sqlalchemy.orm import Session
 from . import schemas, database, auth
 import joblib
 import pandas as pd
-from sklearn.metrics import accuracy_score
 
 app = FastAPI()
 
-# Enable CORS for both local development and Render.com deployment
+# Enable CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "https://titanic-frontend.onrender.com",
-    ],
+    allow_origins=["https://titanic-fullstack.appspot.com"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Create an APIRouter for organizing endpoints
 router = APIRouter()
-
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(database.get_db)):
@@ -64,8 +58,11 @@ async def predict(
     current_user: database.User = Depends(get_current_user),
     db: Session = Depends(database.get_db)
 ):
-    # Load the model
-    model = joblib.load("app/models/model.pkl")
+    try:
+        # Load the model inside the endpoint
+        model = joblib.load("app/models/model.pkl")
+    except FileNotFoundError:
+        raise HTTPException(status_code=500, detail="Model file not found")
 
     # Prepare the input data
     data = {
@@ -76,9 +73,7 @@ async def predict(
         "Parch": [prediction_input.parch],
         "Fare": [prediction_input.fare],
         "Embarked": [
-            {"S": 0, "C": 1, "Q": 2}.get(
-                prediction_input.embarked[0].upper(), 0
-            )
+            {"S": 0, "C": 1, "Q": 2}.get(prediction_input.embarked[0].upper(), 0)
         ],
     }
     df = pd.DataFrame(data)
@@ -86,7 +81,6 @@ async def predict(
     # Make prediction
     prediction = model.predict(df)[0]
     probability = model.predict_proba(df)[0][1]
-
     result = "Survived" if prediction == 1 else "Not Survived"
 
     # Save prediction to database
@@ -120,39 +114,10 @@ async def get_predictions(
 
 @router.get("/stats")
 async def get_stats(db: Session = Depends(database.get_db)):
-    # Calculate total predictions
     total_predictions = db.query(database.Prediction).count()
-
-    # Load the model to compute accuracy (if validation data is available)
-    try:
-        model = joblib.load("app/models/model.pkl")
-
-        # Ideally, you'd have a validation dataset to compute accuracy
-        # For this example, we'll use predictions stored in the database
-        # and assume you have a way to compare them against true labels
-        # Here, we'll simulate accuracy calculation if true labels were available
-        predictions = db.query(database.Prediction).all()
-        if predictions:
-            # Simulate true labels (in a real scenario, you'd have these in your DB or dataset)
-            # For demonstration, let's assume 85% accuracy as a placeholder
-            # Replace this with actual logic if you have ground truth data
-            model_accuracy = 85  # Placeholder
-            """
-            Example of real accuracy calculation (if true labels exist):
-            true_labels = [fetch from db or dataset]
-            predicted_labels = [p.result for p in predictions]
-            model_accuracy = accuracy_score(true_labels, predicted_labels) * 100
-            """
-        else:
-            model_accuracy = 85  # Default if no predictions exist
-    except Exception as e:
-        print(f"Error loading model for accuracy calculation: {e}")
-        model_accuracy = 85  # Fallback
-
     return {
         "total_predictions": total_predictions,
-        "model_accuracy": model_accuracy
+        "model_accuracy": 85  # Placeholder since model loading might fail
     }
 
-# Include the router in the main app
 app.include_router(router)
